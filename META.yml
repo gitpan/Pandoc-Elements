@@ -1,8 +1,9 @@
 ---
-abstract: 'utility functions to create Pandoc documents'
+abstract: 'utility functions to create and process Pandoc documents'
 author:
-  - 'Jakob Voß <jakob.voss@gbv.de>'
+  - 'Jakob Voß'
 build_requires:
+  JSON: 0
   Test::More: 0.96
 configure_requires:
   Module::Build::Tiny: 0.038
@@ -27,6 +28,6 @@ resources:
   bugtracker: https://github.com/nichtich/Pandoc-Elements/issues
   homepage: https://github.com/nichtich/Pandoc-Elements
   repository: https://github.com/nichtich/Pandoc-Elements.git
-version: 0.01
+version: 0.02
 x_contributors:
   - 'Jakob Voss <voss@gbv.de>'

@@ -9,6 +9,11 @@ README
 cpanfile
 dist.ini
 lib/Pandoc/Elements.pm
+lib/Pandoc/Walker.pm
+t/attributes.t
+t/documents/example.json
+t/documents/example.md
 t/elements.t
 t/release-pod-syntax.t
 t/synopsis.t
+t/walker.t
