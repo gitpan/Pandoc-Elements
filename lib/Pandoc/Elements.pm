@@ -3,76 +3,91 @@ use strict;
 use warnings;
 use 5.008_005;
 
-our $VERSION = '0.03';
+our $VERSION = '0.04';
 
 our %ELEMENTS = (
-    Plain => [ Block => 1 ],
-    Para => [ Block => 1 ],
-    CodeBlock => [ Block => 2 ],
-    RawBlock => [ Block => 2 ],
-    BlockQuote => [ Block => 1 ],
-    OrderedList => [ Block => 2 ],
-    BulletList => [ Block => 1 ],
-    DefinitionList => [ Block => 1 ],
-    Header => [ Block => 3 ],
-    HorizontalRule => [ Block => 0 ],
-    Table => [ Block => 5 ],
-    Div => [ Block => 2 ],
-    Null => [ Block => 0 ],
+    Plain => [ Block => 'content' ],
+    Para => [ Block => 'content' ],
+    CodeBlock => [ Block => qw(attr content) ],
+    RawBlock => [ Block => qw(format content) ],
+    BlockQuote => [ Block => 'content' ],
+    OrderedList => [ Block => qw(attr content) ],
+    BulletList => [ Block => 'content' ],
+    DefinitionList => [ Block => 'content' ],
+    Header => [ Block => qw(level attr content) ],
+    HorizontalRule => [ 'Block' ],
+    Table => [ Block => qw(caption alignment widths headers rows) ],
+    Div => [ Block => qw(attr content) ],
+    Null => [ 'Block' ],
 
-    Str => [ Inline => 1 ],
-    Emph => [ Inline => 1 ],
-    Strong => [ Inline => 1 ],
-    Strikeout => [ Inline => 1 ],
-    Superscript => [ Inline => 1 ],
-    Subscript => [ Inline => 1 ],
-    SmallCaps => [ Inline => 1 ],
-    Quoted => [ Inline => 2 ],
-    Cite => [ Inline => 2 ],
-    Code => [ Inline => 2 ],
-    Space => [ Inline => 0 ],
-    LineBreak => [ Inline => 0 ],
-    Math => [ Inline => 2 ],
-    RawInline => [ Inline => 2 ],
-    Link => [ Inline => 2 ],
-    Image => [ Inline => 2 ],
-    Note => [ Inline => 1 ],
-    Span => [ Inline => 2 ],
+    Str => [ Inline => 'content' ],
+    Emph => [ Inline => 'content' ],
+    Strong => [ Inline => 'content' ],
+    Strikeout => [ Inline => 'content' ],
+    Superscript => [ Inline => 'content' ],
+    Subscript => [ Inline => 'content' ],
+    SmallCaps => [ Inline => 'content' ],
+    Quoted => [ Inline => qw(type content) ],
+    Cite => [ Inline => qw(citation content) ],
+    Code => [ Inline => qw(attr content) ],
+    Space => [ 'Inline' ],
+    LineBreak => [ 'Inline' ],
+    Math => [ Inline => qw(type content) ],
+    RawInline => [ Inline => qw(format content) ],
+    Link => [ Inline => qw(content target) ],
+    Image => [ Inline => qw(content target) ],
+    Note => [ Inline => 'content' ],
+    Span => [ Inline => qw(attr content) ],
     
-    MetaBool => [ Meta => 1 ],
-    MetaString => [ Meta => 1 ],
-    MetaMap => [ Meta => 1 ],
-    MetaInlines => [ Meta => 1 ],
-    MetaList => [ Meta => 1 ],
-    MetaBlocks => [ Meta => 1 ],
+    MetaBool => [ Meta => 'content' ],
+    MetaString => [ Meta => 'content' ],
+    MetaMap => [ Meta => 'content' ],
+    MetaInlines => [ Meta => 'content' ],
+    MetaList => [ Meta => 'content' ],
+    MetaBlocks => [ Meta => 'content' ],
+
 );
+
+# type constructors
+foreach (qw(DefaultDelim Period OneParen TwoParens SingleQuote DoubleQuote
+    DisplayMath InlineMath AuthorInText SuppressAuthor NormalCitation 
+    AlignLeft AlignRight AlignCenter AlignDefault DefaultStyle Example 
+    Decimal LowerRoman UpperRoman LowerAlpha UpperAlpha)) {
+    $ELEMENTS{$_} = ['Inline']
+}
 
 use Carp;
 use JSON qw(decode_json);
 use Scalar::Util qw(reftype);
+use Pandoc::Walker qw(walk);
+
 use parent 'Exporter';
 our @EXPORT = (keys %ELEMENTS, qw(Document attributes));
 our @EXPORT_OK = (@EXPORT, 'element', 'from_json');
 
-foreach my $name (qw(Inline Block Meta Document)) {
-    no strict 'refs';
-    eval "package Pandoc::AST::$name; our \@ISA=qw(Pandoc::AST::Element)";
-}
-
+# create constructor functions
 foreach my $name (keys %ELEMENTS) {
-    no strict 'refs';
+    no strict 'refs'; ## no critic
 
-    my $parent  = $ELEMENTS{$name}->[0];
-    my $numargs = $ELEMENTS{$name}->[1];
-    my $class = "Pandoc::AST::$name";
+    my ($parent, @accessors) = @{$ELEMENTS{$name}};
+    my $numargs = scalar @accessors;
+    my $class = "Pandoc::Document::$name";
 
-    eval "package $class; our \@ISA = qw(Pandoc::AST::$parent);";
+    eval "package $class; our \@ISA = qw(Pandoc::Document::$parent);";
 
     *{__PACKAGE__."::$name"} = Scalar::Util::set_prototype( sub {
         croak "$name expects $numargs arguments, but given " . scalar @_
             if @_ != $numargs;
         bless { t => $name, c => (@_ == 1 ? $_[0] : \@_) }, $class;
     }, '$' x $numargs );
+
+    for (my $i=0; $i<@accessors; $i++) {
+        *{$class."::".$accessors[$i]} = eval(
+            @accessors == 1 
+                ? "sub { \$_[0]->{c} }"
+                : "sub { \$_[0]->{c}->[$i] }"
+        );
+    }
 }
 
 sub element {
@@ -83,36 +98,12 @@ sub element {
     &$name(@_);
 }
 
-{
-    package Pandoc::AST::Element;
-    use JSON ();
-    use Scalar::Util qw(reftype);
-    sub to_json { JSON->new->utf8->convert_blessed->encode($_[0]) }
-    sub TO_JSON {
-        return unless reftype $_[0];
-        if (reftype $_[0] eq 'ARRAY') {
-            return  [ @{$_[0]} ] ;
-        } elsif (reftype $_[0] eq 'HASH') {
-            return  { %{$_[0]} } ;
-        }
-        return;
-    }    
-    sub name { $_[0]->{t} }
-    sub value { $_[0]->{c} }
-    sub is_document { $_[0]->isa('Pandoc::AST::Document') }
-    sub is_block    { $_[0]->isa('Pandoc::AST::Block') }
-    sub is_inline   { $_[0]->isa('Pandoc::AST::Inline') }
-    sub is_meta     { $_[0]->isa('Pandoc::AST::Meta') }
-}
-
-sub Pandoc::AST::Document::name { 'Document' }
-sub Pandoc::AST::Document::meta { $_[0]->[0]->{unMeta} }
-sub Pandoc::AST::Document::value { $_[0]->[1] }
-
 sub Document($$) {
    @_ == 2 or croak "Document expects 2 arguments, but given " . scalar @_;
-   return bless [ { unMeta => $_[0] }, $_[1] ], 'Pandoc::AST::Document';
+   return bless [ { unMeta => $_[0] }, $_[1] ], 'Pandoc::Document';
 }
+
+# additional functions
 
 sub attributes($) {
     my ($attrs) = @_;
@@ -126,8 +117,6 @@ sub attributes($) {
         ]
     ];
 }
-
-use Pandoc::Walker qw(walk);
 
 sub from_json {
     shift if $_[0] =~ /^Pandoc::/;
@@ -147,11 +136,67 @@ sub from_json {
     }
 
     walk $ast, sub {
-        bless $_[0], 'Pandoc::AST::'.$_[0]->{t};
+        bless $_[0], 'Pandoc::Document::'.$_[0]->{t};
     };
 
     return $ast;
 }
+
+# document element packages
+
+{
+    package Pandoc::Document;
+    use strict;
+    our $VERSION = '0.04';
+    our @ISA = ('Pandoc::Document::Element');
+    sub TO_JSON { [ @{$_[0]} ] }
+    sub name { 'Document' }
+    sub meta { $_[0]->[0]->{unMeta} }
+    sub content { $_[0]->[1] }
+    sub is_document { 1 }
+}
+
+{
+    package Pandoc::Document::Element;
+    use strict;
+    use warnings;
+    our $VERSION = $Pandoc::Document::VERSION;
+    use JSON ();
+    use Scalar::Util qw(reftype);
+    sub to_json { 
+        JSON->new->utf8->convert_blessed->encode($_[0])
+    }
+    sub TO_JSON { return { %{$_[0]} } }    
+    sub name        { $_[0]->{t} }
+    sub value       { $_[0]->{c} }
+    sub content     { $_[0]->{c} }
+    sub is_document { 0 }
+    sub is_block    { 0 }
+    sub is_inline   { 0 }
+    sub is_meta     { 0 }
+}
+
+{
+    package Pandoc::Document::Block;
+    our $VERSION = $PANDOC::Document::VERSION;
+    our @ISA = ('Pandoc::Document::Element');
+    sub is_block { 1 }
+}
+
+{
+    package Pandoc::Document::Inline;
+    our $VERSION = $PANDOC::Document::VERSION;
+    our @ISA = ('Pandoc::Document::Element');
+    sub is_inline { 1 }
+}
+
+{
+    package Pandoc::Document::Meta;
+    our $VERSION = $PANDOC::Document::VERSION;
+    our @ISA = ('Pandoc::Document::Element');
+    sub is_meta { 1 }
+}
+
 
 1;
 __END__
@@ -206,12 +251,28 @@ document formats, such as HTML, LaTeX, ODT, and ePUB.
 See also module L<Pandoc::Filter> and L<Pandoc::Walker> for processing the AST
 in Perl.
 
-=head1 ELEMENT METHODS 
+=head2 FUNCTIONS
+
+In addition to constructor functions for each document element, the following
+functions are exported.
+
+=head3 attributes { key => $value, ... }
+
+Maps a hash reference into an attributes list with id, classes, and ordered
+key-value pairs.
+
+=head3 element( $name => $content )
+
+Create a Pandoc document element. This function is only exported on request.
+
+=head1 ELEMENTS 
 
 AST elements are encoded as Perl data structures equivalent to the JSON
 structure, emitted with pandoc output format C<json>. All elements are blessed
-objects in the C<Pandoc::AST::> namespace, for instance C<Pandoc::AST::Para>
-for paragraph elements. 
+objects that provide the following methods. Additional accessor methods for
+particular elements are listed below at each element.
+
+=head2 ELEMENT METHODS
 
 =head2 json
 
@@ -219,6 +280,22 @@ Return the element as JSON encoded string. The following are equivalent:
 
     $element->to_json;
     JSON->new->utf8->convert_blessed->encode($element);
+
+=head2 name
+
+Return the name of the element, e.g. "Para"
+
+=head2 value
+
+Return the full element content as array reference. You may better use one of
+the specific accessor methods or the content method.
+
+=head2 content
+
+Return the element content. For many elements (Para, Emph, Str...) this is
+equal to the value, but if elements consist of multiple parts, the content is a
+subset of the value. For instance the Link element consists a link text
+(content) and a link target (target).
 
 =head2 is_block
 
@@ -236,35 +313,62 @@ True if the element is a L<Metadata element|/METADATA ELEMENTS>
 
 True if the element is a L<Document element|/DOCUMENT ELEMENT>
 
-=head1 FUNCTIONS
-
 =head2 BLOCK ELEMENTS
 
 =head3 BlockQuote
 
+Block quote, consisting of a list of L<blocks|/BLOCK ELEMENTS> (C<content>)
+
 =head3 BulletList
+
+...
 
 =head3 CodeBlock
 
+...
+
 =head3 DefinitionList
 
+...
+
 =head3 Div
+
+Generic container of L<blocks|/BLOCK ELEMENTS> (C<content>) with attributes
+(C<attrs>)
 
 =head3 Header
 
 =head3 HorizontalRule
 
+Horizontal rule
+
 =head3 Null
+
+Nothing
 
 =head3 OrderedList
 
+...
+
 =head3 Para
+
+Paragraph, consisting of a list of L<Inline elements|/INLINE ELEMENTS>
+(C<content>).
 
 =head3 Plain
 
+Plain text, not a paragraph, consisting of a list of L<Inline elements|/INLINE
+ELEMENTS> (C<content>).
+
 =head3 RawBlock
 
+Raw block with C<format> and C<content> string.
+
 =head3 Table
+
+Table, with C<caption>, column C<alignments>, relative column C<widths> (0 =
+default), column C<headers> (each a list of L<blocks|/BLOCK ELEMENTS>), and
+C<rows> (each a list of lists of L<blocks|/BLOCK ELEMENTS>).
 
 =head2 INLINE ELEMENTS
 
@@ -322,18 +426,22 @@ True if the element is a L<Document element|/DOCUMENT ELEMENT>
 
 =head3 Document
 
-Root element, consisting of metadata hash and document element array.
+Root element, consisting of metadata hash (C<meta>) and document element array
+(C<content>).
 
-=head2 ADDITIONAL FUNCTIONS
+=head2 TYPES
 
-=head3 attributes { key => $value, ... }
+The following elements are used as types only: DefaultDelim Period OneParen
+TwoParens SingleQuote DoubleQuote DisplayMath InlineMath AuthorInText
+SuppressAuthor NormalCitation AlignLeft AlignRight AlignCenter AlignDefault
+DefaultStyle Example Decimal LowerRoman UpperRoman LowerAlpha UpperAlpha
 
-Maps a hash reference into an attributes list with id, classes, and ordered
-key-value pairs.
+=head1 SEE ALSO
 
-=head3 element( $name => $content )
+L<Pandoc> implements a wrapper around the pandoc executable.
 
-Create a Pandoc document element. This function is only exported on request.
+L<Text.Pandoc.Definition|https://hackage.haskell.org/package/pandoc-types/docs/Text-Pandoc-Definition.html>
+contains the original definition of Pandoc document data structure in Haskell.
 
 =head1 AUTHOR
 
@@ -343,12 +451,8 @@ Jakob Voß E<lt>jakob.voss@gbv.deE<gt>
 
 Copyright 2014- Jakob Voß
 
-This library is free software; you can redistribute it and/or modify
-it under the same terms as Perl itself.
+GNU General Public License, Version 2
 
-=head1 SEE ALSO
-
-See L<Text.Pandoc.Definition|https://hackage.haskell.org/package/pandoc-types/docs/Text-Pandoc-Definition.html>
-for the original definition of Pandoc document data structure in Haskell.
+This module is heavily based on Pandoc by John MacFarlane.
 
 =cut

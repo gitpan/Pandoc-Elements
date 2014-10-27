@@ -11,6 +11,7 @@ dist.ini
 lib/Pandoc/Elements.pm
 lib/Pandoc/Filter.pm
 lib/Pandoc/Walker.pm
+t/accessors.t
 t/ast.t
 t/attributes.t
 t/documents/example.json

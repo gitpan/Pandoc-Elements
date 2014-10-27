@@ -33,17 +33,43 @@ DESCRIPTION
     See also module Pandoc::Filter and Pandoc::Walker for processing the AST
     in Perl.
 
-ELEMENT METHODS
+  FUNCTIONS
+    In addition to constructor functions for each document element, the
+    following functions are exported.
+
+   attributes { key => $value, ... }
+    Maps a hash reference into an attributes list with id, classes, and
+    ordered key-value pairs.
+
+   element( $name => $content )
+    Create a Pandoc document element. This function is only exported on
+    request.
+
+ELEMENTS
     AST elements are encoded as Perl data structures equivalent to the JSON
     structure, emitted with pandoc output format "json". All elements are
-    blessed objects in the "Pandoc::AST::" namespace, for instance
-    "Pandoc::AST::Para" for paragraph elements.
+    blessed objects that provide the following methods. Additional accessor
+    methods for particular elements are listed below at each element.
 
+  ELEMENT METHODS
   json
     Return the element as JSON encoded string. The following are equivalent:
 
         $element->to_json;
         JSON->new->utf8->convert_blessed->encode($element);
+
+  name
+    Return the name of the element, e.g. "Para"
+
+  value
+    Return the full element content as array reference. You may better use
+    one of the specific accessor methods or the content method.
+
+  content
+    Return the element content. For many elements (Para, Emph, Str...) this
+    is equal to the value, but if elements consist of multiple parts, the
+    content is a subset of the value. For instance the Link element consists
+    a link text (content) and a link target (target).
 
   is_block
     True if the element is a Block element
@@ -57,21 +83,47 @@ ELEMENT METHODS
   is_document
     True if the element is a Document element
 
-FUNCTIONS
   BLOCK ELEMENTS
    BlockQuote
+    Block quote, consisting of a list of blocks ("content")
+
    BulletList
+    ...
+
    CodeBlock
+    ...
+
    DefinitionList
+    ...
+
    Div
+    Generic container of blocks ("content") with attributes ("attrs")
+
    Header
    HorizontalRule
+    Horizontal rule
+
    Null
+    Nothing
+
    OrderedList
+    ...
+
    Para
+    Paragraph, consisting of a list of Inline elements ("content").
+
    Plain
+    Plain text, not a paragraph, consisting of a list of Inline elements
+    ("content").
+
    RawBlock
+    Raw block with "format" and "content" string.
+
    Table
+    Table, with "caption", column "alignments", relative column "widths" (0
+    = default), column "headers" (each a list of blocks), and "rows" (each a
+    list of lists of blocks).
+
   INLINE ELEMENTS
    Cite
    Code
@@ -100,16 +152,23 @@ FUNCTIONS
    MetaString
   DOCUMENT ELEMENT
    Document
-    Root element, consisting of metadata hash and document element array.
+    Root element, consisting of metadata hash ("meta") and document element
+    array ("content").
 
-  ADDITIONAL FUNCTIONS
-   attributes { key => $value, ... }
-    Maps a hash reference into an attributes list with id, classes, and
-    ordered key-value pairs.
+  TYPES
+    The following elements are used as types only: DefaultDelim Period
+    OneParen TwoParens SingleQuote DoubleQuote DisplayMath InlineMath
+    AuthorInText SuppressAuthor NormalCitation AlignLeft AlignRight
+    AlignCenter AlignDefault DefaultStyle Example Decimal LowerRoman
+    UpperRoman LowerAlpha UpperAlpha
 
-   element( $name => $content )
-    Create a Pandoc document element. This function is only exported on
-    request.
+SEE ALSO
+    Pandoc implements a wrapper around the pandoc executable.
+
+    Text.Pandoc.Definition
+    <https://hackage.haskell.org/package/pandoc-types/docs/Text-Pandoc-Defin
+    ition.html> contains the original definition of Pandoc document data
+    structure in Haskell.
 
 AUTHOR
     Jakob Voß <jakob.voss@gbv.de>
@@ -117,12 +176,7 @@ AUTHOR
 COPYRIGHT AND LICENSE
     Copyright 2014- Jakob Voß
 
-    This library is free software; you can redistribute it and/or modify it
-    under the same terms as Perl itself.
+    GNU General Public License, Version 2
 
-SEE ALSO
-    See Text.Pandoc.Definition
-    <https://hackage.haskell.org/package/pandoc-types/docs/Text-Pandoc-Defin
-    ition.html> for the original definition of Pandoc document data
-    structure in Haskell.
+    This module is heavily based on Pandoc by John MacFarlane.
 
