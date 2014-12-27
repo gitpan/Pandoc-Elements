@@ -3,7 +3,7 @@ use strict;
 use warnings;
 use 5.008_005;
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 our %ELEMENTS = (
     Plain => [ Block => 'content' ],
@@ -11,9 +11,9 @@ our %ELEMENTS = (
     CodeBlock => [ Block => qw(attr content) ],
     RawBlock => [ Block => qw(format content) ],
     BlockQuote => [ Block => 'content' ],
-    OrderedList => [ Block => qw(attr content) ],
-    BulletList => [ Block => 'content' ],
-    DefinitionList => [ Block => 'content' ],
+    OrderedList => [ Block => qw(attr content/items) ],
+    BulletList => [ Block => 'content/items' ],
+    DefinitionList => [ Block => 'content/items:[DefinitionPair]' ],
     Header => [ Block => qw(level attr content) ],
     HorizontalRule => [ 'Block' ],
     Table => [ Block => qw(caption alignment widths headers rows) ],
@@ -38,7 +38,7 @@ our %ELEMENTS = (
     Image => [ Inline => qw(content target) ],
     Note => [ Inline => 'content' ],
     Span => [ Inline => qw(attr content) ],
-    
+
     MetaBool => [ Meta => 'content' ],
     MetaString => [ Meta => 'content' ],
     MetaMap => [ Meta => 'content' ],
@@ -82,11 +82,15 @@ foreach my $name (keys %ELEMENTS) {
     }, '$' x $numargs );
 
     for (my $i=0; $i<@accessors; $i++) {
-        *{$class."::".$accessors[$i]} = eval(
-            @accessors == 1 
-                ? "sub { \$_[0]->{c} }"
-                : "sub { \$_[0]->{c}->[$i] }"
-        );
+        my $code = @accessors == 1
+                 ? "\$_[0]->{c}" : "\$_[0]->{c}->[$i]";
+        # auto-bless on access via accessor (TODO: move to constructor?)
+        if ($accessors[$i] =~ s/:\[(.+)\]$//) {
+            $code = "[ map { bless \$_, 'Pandoc::Document::$1' } \@{$code} ]";
+        }
+        for (split '/', $accessors[$i]) {
+            *{$class."::$_"} = eval "sub { $code }";
+        }
     }
 }
 
@@ -102,6 +106,15 @@ sub Document($$) {
    @_ == 2 or croak "Document expects 2 arguments, but given " . scalar @_;
    return bless [ { unMeta => $_[0] }, $_[1] ], 'Pandoc::Document';
 }
+
+# specific accessors
+
+sub Pandoc::Document::Link::url { $_[0]->{c}->[1][0] }
+sub Pandoc::Document::Link::title { $_[0]->{c}->[1][1] }
+sub Pandoc::Document::Image::url { $_[0]->{c}->[1][0] }
+sub Pandoc::Document::Image::title { $_[0]->{c}->[1][1] }
+sub Pandoc::Document::DefinitionPair::term { $_[0]->[0] }
+sub Pandoc::Document::DefinitionPair::definitions { $_[0]->[1] }
 
 # additional functions
 
@@ -168,7 +181,6 @@ sub from_json {
     }
     sub TO_JSON { return { %{$_[0]} } }    
     sub name        { $_[0]->{t} }
-    sub value       { $_[0]->{c} }
     sub content     { $_[0]->{c} }
     sub is_document { 0 }
     sub is_block    { 0 }
@@ -241,15 +253,15 @@ an equivalent Pandoc Markdown document would be
     # Gruß {.de}
     Hello, world!
 
+See module L<Pandoc::Filter> and L<Pandoc::Walker> for processing the abstract
+syntax tree of pandoc documents in Perl.
+
 =head1 DESCRIPTION
 
 Pandoc::Elements provides utility functions to create abstract syntax trees
 (AST) of L<Pandoc|http://johnmacfarlane.net/pandoc/> documents. The resulting
-data structure can be processed by pandoc to be converted an many other
-document formats, such as HTML, LaTeX, ODT, and ePUB. 
-
-See also module L<Pandoc::Filter> and L<Pandoc::Walker> for processing the AST
-in Perl.
+data structure can be converted by L<Pandoc> to many other document formats,
+such as HTML, LaTeX, ODT, and ePUB. 
 
 =head2 FUNCTIONS
 
@@ -269,47 +281,43 @@ Create a Pandoc document element. This function is only exported on request.
 
 AST elements are encoded as Perl data structures equivalent to the JSON
 structure, emitted with pandoc output format C<json>. All elements are blessed
-objects that provide the following methods. Additional accessor methods for
-particular elements are listed below at each element.
+objects that provide the following element methods and additional accessor
+methods specific to each element.
 
 =head2 ELEMENT METHODS
 
-=head2 json
+=head3 json
 
 Return the element as JSON encoded string. The following are equivalent:
 
     $element->to_json;
     JSON->new->utf8->convert_blessed->encode($element);
 
-=head2 name
+=head3 name
 
-Return the name of the element, e.g. "Para"
+Return the name of the element, e.g. "Para" for a L<paragraph element|/Para>.
 
-=head2 value
+=head3 content
 
-Return the full element content as array reference. You may better use one of
-the specific accessor methods or the content method.
+Return the element content. For most elements (L<Para|/Para>, L<Emph|/Emph>,
+L<Str|/Str>...) the content is an array reference with child elements. Other
+elements consist of multiple parts; for instance the L<Link|/Link> element has
+a link text (C<content>) and a link target (C<target>) with C<url> and
+C<title>.
 
-=head2 content
-
-Return the element content. For many elements (Para, Emph, Str...) this is
-equal to the value, but if elements consist of multiple parts, the content is a
-subset of the value. For instance the Link element consists a link text
-(content) and a link target (target).
-
-=head2 is_block
+=head3 is_block
 
 True if the element is a L<Block element|/BLOCK ELEMENTS>
 
-=head2 is_inline
+=head3 is_inline
 
 True if the element is an inline L<Inline element|/INLINE ELEMENTS>
 
-=head2 is_meta
+=head3 is_meta
 
 True if the element is a L<Metadata element|/METADATA ELEMENTS>
 
-=head2 is_document
+=head3 is_document
 
 True if the element is a L<Document element|/DOCUMENT ELEMENT>
 
@@ -338,6 +346,8 @@ Generic container of L<blocks|/BLOCK ELEMENTS> (C<content>) with attributes
 
 =head3 Header
 
+...
+
 =head3 HorizontalRule
 
 Horizontal rule
@@ -348,7 +358,9 @@ Nothing
 
 =head3 OrderedList
 
-...
+Definition list of C<items>/C<content>, each a pair consisting of a term (a
+list of L<inlines|/INLINE ELEMENTS>) and one or more definitions (each a list
+of L<blocks|/BLOCK ELEMENTS>) 
 
 =head3 Para
 
@@ -431,10 +443,13 @@ Root element, consisting of metadata hash (C<meta>) and document element array
 
 =head2 TYPES
 
-The following elements are used as types only: DefaultDelim Period OneParen
-TwoParens SingleQuote DoubleQuote DisplayMath InlineMath AuthorInText
-SuppressAuthor NormalCitation AlignLeft AlignRight AlignCenter AlignDefault
-DefaultStyle Example Decimal LowerRoman UpperRoman LowerAlpha UpperAlpha
+The following elements are used as types only: 
+
+C<DefaultDelim>, C<Period>, C<OneParen>, C<TwoParens>, C<SingleQuote>,
+C<DoubleQuote>, C<DisplayMath>, C<InlineMath>, C<AuthorInText>,
+C<SuppressAuthor>, C<NormalCitation>, C<AlignLeft>, C<AlignRight>,
+C<AlignCenter>, C<AlignDefault>, C<DefaultStyle>, C<Example>, C<Decimal>,
+C<LowerRoman>, C<UpperRoman>, C<LowerAlpha>, C<UpperAlpha>
 
 =head1 SEE ALSO
 
@@ -442,6 +457,7 @@ L<Pandoc> implements a wrapper around the pandoc executable.
 
 L<Text.Pandoc.Definition|https://hackage.haskell.org/package/pandoc-types/docs/Text-Pandoc-Definition.html>
 contains the original definition of Pandoc document data structure in Haskell.
+This module version was last aligned with pandoc-types-1.12.4.1.
 
 =head1 AUTHOR
 

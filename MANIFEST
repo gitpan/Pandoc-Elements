@@ -8,6 +8,7 @@ META.yml
 README
 cpanfile
 dist.ini
+examples/deflists.pl
 lib/Pandoc/Elements.pm
 lib/Pandoc/Filter.pm
 lib/Pandoc/Walker.pm
@@ -17,6 +18,8 @@ t/attributes.t
 t/documents/example.json
 t/documents/example.md
 t/elements.t
+t/examples/deemph.in.md
+t/examples/deemph.out.md
 t/filter.t
 t/pandoc_filter.t
 t/release-pod-syntax.t

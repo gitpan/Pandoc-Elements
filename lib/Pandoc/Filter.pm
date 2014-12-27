@@ -2,7 +2,7 @@ package Pandoc::Filter;
 use strict;
 use warnings;
 
-our $VERSION = '0.04';
+our $VERSION = '0.05';
 
 use JSON;
 use Carp;
@@ -17,11 +17,9 @@ sub stringify {
     my ($ast) = @_;
     my @result;
     walk( $ast, sub {
-        my ($name, $value) = ($_[0]->name, $_[0]->value);
-        if ($name eq 'Str') {
-            push @result, $value;
-        } elsif ($name eq 'Code' or $name eq 'Math') {
-            push @result, $value->[1];
+        my ($name, $content) = ($_[0]->name, $_[0]->content);
+        if ($name eq 'Str' or $name eq 'Code' or $name eq 'Math') {
+            push @result, $content;
         } elsif ($name eq 'LineBreak' or $name eq 'Space') {
             push @result, " ";
         }
@@ -44,7 +42,7 @@ sub pandoc_filter(@) { ## no critic
 
 sub new {
     my $class = shift;
-    if ( grep { reftype $_ ne 'CODE' } @_ ) {
+    if ( grep { !reftype $_ or reftype $_ ne 'CODE' } @_ ) {
         croak $class.'->new expects a list of CODE references';
     }
     bless \@_, $class;
@@ -71,8 +69,8 @@ Pandoc::Filter - process Pandoc abstract syntax tree
 
 =head1 SYNOPSIS
 
-The following filter, adopted from [pandoc scripting
-documentation](http://johnmacfarlane.net/pandoc/scripting.html) converts level
+The following filter, adopted from L<pandoc scripting
+documentation|http://johnmacfarlane.net/pandoc/scripting.html> converts level
 2+ headers to regular paragraphs.
 
     use Pandoc::Filter;
@@ -89,8 +87,11 @@ Pandoc::Filter is a port of
 L<pandocfilters|https://github.com/jgm/pandocfilters> from Python to modern
 Perl.  The module provide provides functions to aid writing Perl scripts that
 process a L<Pandoc|http://johnmacfarlane.net/pandoc/> abstract syntax tree
-(AST) serialized as JSON. See also L<Pandoc::Elements> and L<Pandoc::Walker>
-for modules that filters are based on.
+(AST) serialized as JSON. See L<Pandoc::Elements> for documentation of AST
+elements.
+
+In most cases you better use the function interface in L<Pandoc::Walker> which
+this module is based on.
 
 =head1 METHODS
 
@@ -101,10 +102,10 @@ reference(s).
 
 =head2 apply( $ast [, $format [ $metadata ] ] )
 
-Apply all actions to a given abstract syntax tree. The syntax tree is modified
-in place and also returned for convenience. Additional argument format and
-metadata are also passed to the action function. Metadata is taken from
-the Document by default (if the AST is a Document root).
+Apply all actions to a given abstract syntax tree (AST). The AST is modified in
+place and also returned for convenience. Additional argument format and
+metadata are also passed to the action function. Metadata is taken from the
+Document by default (if the AST is a Document root).
 
 =head1 FUNCTIONS
 
@@ -122,8 +123,12 @@ AST as single line of JSON. This function is roughly equivalent to
 Walks the ast and returns concatenated string content, leaving out all
 formatting.
 
-=head1 SEE ALSO
+=head1 COPYRIGHT AND LICENSE
 
-L<Pandoc::Elements>, L<Pandoc::Walker>
+Copyright 2014- Jakob Voß
+
+GNU General Public License, Version 2
+
+This module is heavily based on Pandoc by John MacFarlane.
 
 =cut

@@ -1,5 +1,11 @@
 Revision history for Pandoc-Elements
 
+0.05  2014-12-27 15:45:38 CET
+    - fixed filter bug (issue #5)
+    - added examples
+    - added more accessor methods
+    - remove method value
+
 0.04  2014-10-27 14:09:21 CET
     - added accessor methods (issue #1)
     - refactoring

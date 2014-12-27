@@ -24,14 +24,14 @@ SYNOPSIS
         # Gruß {.de}
         Hello, world!
 
+    See module Pandoc::Filter and Pandoc::Walker for processing the abstract
+    syntax tree of pandoc documents in Perl.
+
 DESCRIPTION
     Pandoc::Elements provides utility functions to create abstract syntax
     trees (AST) of Pandoc <http://johnmacfarlane.net/pandoc/> documents. The
-    resulting data structure can be processed by pandoc to be converted an
-    many other document formats, such as HTML, LaTeX, ODT, and ePUB.
-
-    See also module Pandoc::Filter and Pandoc::Walker for processing the AST
-    in Perl.
+    resulting data structure can be converted by Pandoc to many other
+    document formats, such as HTML, LaTeX, ODT, and ePUB.
 
   FUNCTIONS
     In addition to constructor functions for each document element, the
@@ -48,39 +48,35 @@ DESCRIPTION
 ELEMENTS
     AST elements are encoded as Perl data structures equivalent to the JSON
     structure, emitted with pandoc output format "json". All elements are
-    blessed objects that provide the following methods. Additional accessor
-    methods for particular elements are listed below at each element.
+    blessed objects that provide the following element methods and
+    additional accessor methods specific to each element.
 
   ELEMENT METHODS
-  json
+   json
     Return the element as JSON encoded string. The following are equivalent:
 
         $element->to_json;
         JSON->new->utf8->convert_blessed->encode($element);
 
-  name
-    Return the name of the element, e.g. "Para"
+   name
+    Return the name of the element, e.g. "Para" for a paragraph element.
 
-  value
-    Return the full element content as array reference. You may better use
-    one of the specific accessor methods or the content method.
+   content
+    Return the element content. For most elements (Para, Emph, Str...) the
+    content is an array reference with child elements. Other elements
+    consist of multiple parts; for instance the Link element has a link text
+    ("content") and a link target ("target") with "url" and "title".
 
-  content
-    Return the element content. For many elements (Para, Emph, Str...) this
-    is equal to the value, but if elements consist of multiple parts, the
-    content is a subset of the value. For instance the Link element consists
-    a link text (content) and a link target (target).
-
-  is_block
+   is_block
     True if the element is a Block element
 
-  is_inline
+   is_inline
     True if the element is an inline Inline element
 
-  is_meta
+   is_meta
     True if the element is a Metadata element
 
-  is_document
+   is_document
     True if the element is a Document element
 
   BLOCK ELEMENTS
@@ -100,6 +96,8 @@ ELEMENTS
     Generic container of blocks ("content") with attributes ("attrs")
 
    Header
+    ...
+
    HorizontalRule
     Horizontal rule
 
@@ -107,7 +105,8 @@ ELEMENTS
     Nothing
 
    OrderedList
-    ...
+    Definition list of "items"/"content", each a pair consisting of a term
+    (a list of inlines) and one or more definitions (each a list of blocks)
 
    Para
     Paragraph, consisting of a list of Inline elements ("content").
@@ -156,11 +155,13 @@ ELEMENTS
     array ("content").
 
   TYPES
-    The following elements are used as types only: DefaultDelim Period
-    OneParen TwoParens SingleQuote DoubleQuote DisplayMath InlineMath
-    AuthorInText SuppressAuthor NormalCitation AlignLeft AlignRight
-    AlignCenter AlignDefault DefaultStyle Example Decimal LowerRoman
-    UpperRoman LowerAlpha UpperAlpha
+    The following elements are used as types only:
+
+    "DefaultDelim", "Period", "OneParen", "TwoParens", "SingleQuote",
+    "DoubleQuote", "DisplayMath", "InlineMath", "AuthorInText",
+    "SuppressAuthor", "NormalCitation", "AlignLeft", "AlignRight",
+    "AlignCenter", "AlignDefault", "DefaultStyle", "Example", "Decimal",
+    "LowerRoman", "UpperRoman", "LowerAlpha", "UpperAlpha"
 
 SEE ALSO
     Pandoc implements a wrapper around the pandoc executable.
@@ -168,7 +169,8 @@ SEE ALSO
     Text.Pandoc.Definition
     <https://hackage.haskell.org/package/pandoc-types/docs/Text-Pandoc-Defin
     ition.html> contains the original definition of Pandoc document data
-    structure in Haskell.
+    structure in Haskell. This module version was last aligned with
+    pandoc-types-1.12.4.1.
 
 AUTHOR
     Jakob Voß <jakob.voss@gbv.de>
